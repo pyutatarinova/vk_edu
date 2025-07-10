@@ -57,7 +57,7 @@ def process_message(data):
         else:
             send_message(user_id, "Извините, я пока не знаю ответа 😕\nПопробуйте найти информацию на сайте: https://edu.vk.com/projects")
 
-@app.route("/callback", methods=["POST"])
+@app.route("/", methods=["POST"])
 def main():
     data = request.get_json()
     print("Received event:", data)
