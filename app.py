@@ -1,15 +1,22 @@
-from flask import Flask, request, Response
-import json
-import requests
+import os
 import threading
-from config import TOKEN, CONFIRMATION_TOKEN, SECRET_KEY, API_VERSION
+from flask import Flask, request
+
+import requests
+import json
 
 app = Flask(__name__)
 
-with open("qa_data.json", "r", encoding="utf-8") as f:
+TOKEN = os.environ.get("TOKEN")  # Токен сообщества
+CONFIRMATION_TOKEN = os.environ.get("CONFIRMATION_TOKEN")  # Строка подтверждения (например, "cb504bf8")
+SECRET_KEY = os.environ.get("SECRET_KEY")  # Секретный ключ Callback API
+API_VERSION = "5.199"
+
+# Загружаем данные и мат-фильтр, как у тебя
+with open("qa_data.json", encoding="utf-8") as f:
     qa_data = json.load(f)
 
-with open("badwords.txt", "r", encoding="utf-8") as f:
+with open("badwords.txt", encoding="utf-8") as f:
     bad_words = set(line.strip().lower() for line in f if line.strip())
 
 def contains_bad_words(text):
@@ -34,39 +41,44 @@ def send_message(user_id, message):
     }
     try:
         requests.post("https://api.vk.com/method/messages.send", params=params, timeout=1)
-    except requests.exceptions.RequestException:
-        pass
+    except Exception as e:
+        print("Error sending message:", e)
 
-def send_message_async(user_id, message):
-    thread = threading.Thread(target=send_message, args=(user_id, message))
-    thread.start()
+def process_message(data):
+    message = data["object"]["message"]["text"]
+    user_id = data["object"]["message"]["from_id"]
+
+    if contains_bad_words(message):
+        send_message(user_id, "Пожалуйста, соблюдайте корректный стиль общения.")
+    else:
+        answer = get_answer(message)
+        if answer:
+            send_message(user_id, answer)
+        else:
+            send_message(user_id, "Извините, я пока не знаю ответа 😕\nПопробуйте найти информацию на сайте: https://edu.vk.com/projects")
 
 @app.route("/", methods=["POST"])
-def webhook():
+def main():
     data = request.get_json()
+    print("Received event:", data)
 
+    # Подтверждение сервера (при добавлении Callback API)
     if data.get("type") == "confirmation":
-        return Response(CONFIRMATION_TOKEN, status=200, mimetype='text/plain')
+        return CONFIRMATION_TOKEN, 200
 
+    # Проверка секрета
     if data.get("secret") != SECRET_KEY:
-        return Response("invalid secret", status=403)
+        return "invalid secret", 403
 
+    # Новое сообщение
     if data.get("type") == "message_new":
-        message = data["object"]["message"]["text"]
-        user_id = data["object"]["message"]["from_id"]
+        # Обрабатываем в отдельном потоке, чтобы быстро вернуть "ok"
+        threading.Thread(target=process_message, args=(data,)).start()
+        return "ok", 200
 
-        if contains_bad_words(message):
-            send_message_async(user_id, "Пожалуйста, соблюдайте корректный стиль общения.")
-        else:
-            answer = get_answer(message)
-            if answer:
-                send_message_async(user_id, answer)
-            else:
-                send_message_async(user_id,
-                    "Извините, я пока не знаю ответа 😕\nПопробуйте найти информацию на сайте: https://edu.vk.com/projects")
-
-    # Важно: возвращаем ok сразу, не дожидаясь отправки сообщений
-    return Response("ok", status=200)
+    # Другие события (просто подтверждаем)
+    return "ok", 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, threaded=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, threaded=True)
