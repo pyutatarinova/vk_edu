@@ -1,11 +1,11 @@
-from flask import Flask, request
+from flask import Flask, request, Response
 import json
 import requests
 from config import TOKEN, CONFIRMATION_TOKEN, SECRET_KEY, API_VERSION
 
 app = Flask(__name__)
 
-# Загружаем базу данных
+# Загружаем QA-данные
 with open("qa_data.json", "r", encoding="utf-8") as f:
     qa_data = json.load(f)
 
@@ -13,24 +13,21 @@ with open("qa_data.json", "r", encoding="utf-8") as f:
 with open("badwords.txt", "r", encoding="utf-8") as f:
     bad_words = set(line.strip().lower() for line in f if line.strip())
 
-# Фильтр мата
+# Проверка на мат
 def contains_bad_words(text):
-    return any(bad_word in text.lower() for bad_word in bad_words)
+    return any(word in text.lower() for word in bad_words)
 
-# Поиск ответа
+# Ответ на вопрос
 def get_answer(message):
     msg = message.lower()
     for question in qa_data:
         if question in msg:
             return qa_data[question]
-
-    # Ответ на закрытые "да/нет" вопросы
-    if msg.endswith("?") and any(word in msg for word in ["возможно", "можно", "могу", "доступно", "разрешено"]):
+    if msg.endswith("?") and any(x in msg for x in ["можно", "возможно", "разрешено", "доступно", "могу"]):
         return "Да."
-
     return None
 
-# Отправка сообщения
+# Отправка ответа в VK
 def send_message(user_id, message):
     params = {
         "user_id": user_id,
@@ -41,36 +38,36 @@ def send_message(user_id, message):
     }
     requests.post("https://api.vk.com/method/messages.send", params=params)
 
-# Обработка запросов от VK
+# Главная точка входа
 @app.route("/", methods=["POST"])
-def vk_webhook():
-    data = request.json
+def webhook():
+    data = request.get_json()
 
-    # Подтверждение адреса сервера
-    if data["type"] == "confirmation":
-        return CONFIRMATION_TOKEN
+    # VK проверяет подтверждение сервера
+    if data.get("type") == "confirmation":
+        return Response(CONFIRMATION_TOKEN, status=200, mimetype='text/plain')
 
-    # Проверка подлинности запроса
-    if "secret" in data and data["secret"] != SECRET_KEY:
-        return "invalid secret"
+    # Проверка секрета
+    if data.get("secret") != SECRET_KEY:
+        return Response("invalid secret", status=403)
 
-    # Обработка новых сообщений
-    if data["type"] == "message_new":
-        user_id = data["object"]["message"]["from_id"]
+    # Новое сообщение от пользователя
+    if data.get("type") == "message_new":
         message = data["object"]["message"]["text"]
+        user_id = data["object"]["message"]["from_id"]
 
         if contains_bad_words(message):
             send_message(user_id, "Пожалуйста, соблюдайте корректный стиль общения.")
         else:
-            response = get_answer(message)
-            if response:
-                send_message(user_id, response)
+            answer = get_answer(message)
+            if answer:
+                send_message(user_id, answer)
             else:
                 send_message(user_id,
-                    "Извините, я пока не знаю ответа 😕\nПопробуйте найти информацию на сайте: https://edu.vk.com/projects или напишите в поддержку.")
+                    "Извините, я пока не знаю ответа 😕\nПопробуйте найти информацию на сайте: https://edu.vk.com/projects")
 
-    return "ok"
+    return Response("ok", status=200)
 
-# Запуск приложения
+# Запуск (важно для Railway)
 if __name__ == "__main__":
-    app.run(port=5000)
+    app.run(host="0.0.0.0", port=5000)
