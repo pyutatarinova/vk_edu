@@ -57,26 +57,21 @@ def process_message(data):
         else:
             send_message(user_id, "Извините, я пока не знаю ответа 😕\nПопробуйте найти информацию на сайте: https://edu.vk.com/projects")
 
-@app.route("/", methods=["POST"])
+@app.route("/callback", methods=["POST"])
 def main():
     data = request.get_json()
     print("Received event:", data)
 
-    # Подтверждение сервера (при добавлении Callback API)
     if data.get("type") == "confirmation":
         return CONFIRMATION_TOKEN, 200
 
-    # Проверка секрета
     if data.get("secret") != SECRET_KEY:
         return "invalid secret", 403
 
-    # Новое сообщение
     if data.get("type") == "message_new":
-        # Обрабатываем в отдельном потоке, чтобы быстро вернуть "ok"
         threading.Thread(target=process_message, args=(data,)).start()
         return "ok", 200
 
-    # Другие события (просто подтверждаем)
     return "ok", 200
 
 if __name__ == "__main__":
