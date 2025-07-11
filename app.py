@@ -3,6 +3,7 @@ import json
 from flask import Flask, request
 import requests
 import config
+import re
 
 app = Flask(__name__)
 
@@ -22,7 +23,8 @@ with open("badwords.txt", encoding="utf-8") as f:
 
 # Проверка на мат
 def contains_bad_words(text):
-    return any(word in text.lower() for word in bad_words)
+    words = re.findall(r'\w+', text.lower())
+    return any(bw in words for bw in bad_words)
 
 # Команда помощи
 def show_help():
