@@ -3,7 +3,6 @@ import json
 from flask import Flask, request
 import requests
 import config
-import re
 
 app = Flask(__name__)
 
@@ -17,15 +16,13 @@ API_VERSION = config.API_VERSION
 with open("qa_data.json", encoding="utf-8") as f:
     qa_data = json.load(f)
 
-# Загрузка словаря с нецензурной лексикой (слова через пробел)
+# Загрузка словаря с нецензурной лексикой
 with open("badwords.txt", encoding="utf-8") as f:
-    content = f.read().lower()
-    bad_words = set(content.split())
+    bad_words = set(line.strip().lower() for line in f if line.strip())
 
 # Проверка на мат
 def contains_bad_words(text):
-    words = re.findall(r'\b\w+\b', text.lower())
-    return any(word in bad_words for word in words)
+    return any(word in text.lower() for word in bad_words)
 
 # Команда помощи
 def show_help():
