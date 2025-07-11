@@ -16,9 +16,10 @@ API_VERSION = config.API_VERSION
 with open("qa_data.json", encoding="utf-8") as f:
     qa_data = json.load(f)
 
-# Загрузка словаря с нецензурной лексикой
+# Загрузка словаря с нецензурной лексикой (слова через пробел)
 with open("badwords.txt", encoding="utf-8") as f:
-    bad_words = set(line.strip().lower() for line in f if line.strip())
+    content = f.read().lower()
+    bad_words = set(content.split())
 
 # Проверка на мат
 def contains_bad_words(text):
