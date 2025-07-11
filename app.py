@@ -1,18 +1,21 @@
 import os
 import threading
-from flask import Flask, request
-
-import requests
 import json
+import re
+from difflib import get_close_matches
+from flask import Flask, request
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 
-TOKEN = os.environ.get("TOKEN")  # Токен сообщества
-CONFIRMATION_TOKEN = os.environ.get("CONFIRMATION_TOKEN")  # Строка подтверждения (например, "cb504bf8")
-SECRET_KEY = os.environ.get("SECRET_KEY")  # Секретный ключ Callback API
+TOKEN = os.environ.get("TOKEN")
+CONFIRMATION_TOKEN = os.environ.get("CONFIRMATION_TOKEN")
+SECRET_KEY = os.environ.get("SECRET_KEY")
 API_VERSION = "5.199"
 
-# Загружаем данные и мат-фильтр, как у тебя
 with open("qa_data.json", encoding="utf-8") as f:
     qa_data = json.load(f)
 
@@ -20,16 +23,30 @@ with open("badwords.txt", encoding="utf-8") as f:
     bad_words = set(line.strip().lower() for line in f if line.strip())
 
 def contains_bad_words(text):
-    return any(word in text.lower() for word in bad_words)
+    words = re.findall(r'\w+', text.lower())
+    return any(word in bad_words for word in words)
 
 def get_answer(message):
     msg = message.lower()
-    for question in qa_data:
-        if question in msg:
-            return qa_data[question]
+
+    # Точное совпадение
+    if msg in qa_data:
+        return qa_data[msg]
+
+    # Похожие вопросы
+    matches = get_close_matches(msg, qa_data.keys(), n=1, cutoff=0.6)
+    if matches:
+        return qa_data[matches[0]]
+
+    # Проверка на закрытые вопросы
     if msg.endswith("?") and any(x in msg for x in ["можно", "возможно", "разрешено", "доступно", "могу"]):
         return "Да."
+
     return None
+
+def search_elsewhere_response():
+    return ("Этот вопрос не относится к проектам VK Education. "
+            "Попробуйте воспользоваться поиском в интернете или уточните запрос.")
 
 def send_message(user_id, message):
     params = {
@@ -55,7 +72,10 @@ def process_message(data):
         if answer:
             send_message(user_id, answer)
         else:
-            send_message(user_id, "Извините, я пока не знаю ответа 😕\nПопробуйте найти информацию на сайте: https://edu.vk.com/projects")
+            send_message(user_id,
+                         "Извините, я пока не знаю ответа 😕\n"
+                         "Попробуйте найти информацию на сайте: https://edu.vk.com/projects\n\n" +
+                         search_elsewhere_response())
 
 @app.route("/", methods=["POST"])
 def main():
@@ -76,4 +96,3 @@ def main():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
