@@ -1,9 +1,9 @@
 import threading
 import json
+import re
 from flask import Flask, request
 import requests
 import config
-import re
 
 app = Flask(__name__)
 
@@ -21,10 +21,16 @@ with open("qa_data.json", encoding="utf-8") as f:
 with open("badwords.txt", encoding="utf-8") as f:
     bad_words = set(line.strip().lower() for line in f if line.strip())
 
-# Проверка на мат
+print(f"✅ Загружено QA пар: {len(qa_data)}")
+print(f"❗ Загружено слов в фильтре мата: {len(bad_words)}")
+
+# Проверка на мат с использованием регулярных выражений
 def contains_bad_words(text):
-    words = re.findall(r'\w+', text.lower())
-    return any(bw in words for bw in bad_words)
+    lowered = text.lower()
+    for word in bad_words:
+        if re.search(rf"\b{re.escape(word)}\b", lowered):
+            return True
+    return False
 
 # Команда помощи
 def show_help():
@@ -41,17 +47,20 @@ def show_help():
         "Отправь /помощь в любой момент."
     )
 
-# Поиск ответа по ключевым словам
+# Поиск ответа по базе
 def get_answer(message):
-    msg = message.lower()
+    msg = message.lower().strip()
 
-    if msg.startswith("/") or msg in ["помощь", "start", "начать"]:
+    # Команды
+    if msg in ["/помощь", "помощь", "start", "/start", "начать"]:
         return show_help()
 
+    # Поиск по ключевым словам
     for item in qa_data:
-        if any(word in msg for word in item["keywords"]):
+        if any(keyword in msg for keyword in item["keywords"]):
             return item["answer"]
 
+    # Закрытые вопросы (да/нет)
     if msg.endswith("?") and any(x in msg for x in ["можно", "возможно", "разрешено", "доступно", "могу"]):
         return "Да."
 
@@ -67,14 +76,16 @@ def send_message(user_id, message):
         "v": API_VERSION
     }
     try:
-        requests.post("https://api.vk.com/method/messages.send", params=params, timeout=2)
+        requests.post("https://api.vk.com/method/messages.send", params=params, timeout=3)
     except Exception as e:
-        print("Ошибка отправки сообщения:", e)
+        print("❌ Ошибка отправки сообщения:", e)
 
 # Обработка входящего сообщения
 def process_message(data):
     message = data["object"]["message"]["text"]
     user_id = data["object"]["message"]["from_id"]
+
+    print(f"📨 Новое сообщение от {user_id}: {message}")
 
     if contains_bad_words(message):
         send_message(user_id, "⚠️ Пожалуйста, соблюдайте корректный стиль общения.")
@@ -83,13 +94,16 @@ def process_message(data):
         if answer:
             send_message(user_id, answer)
         else:
-            send_message(user_id, "Извините, я пока не знаю ответа 😕\nПопробуйте найти информацию на сайте: https://edu.vk.com/projects")
+            send_message(
+                user_id,
+                "Извините, я пока не знаю ответа 😕\nПопробуйте найти информацию на сайте: https://edu.vk.com/projects"
+            )
 
 # Обработка Callback от VK
 @app.route("/", methods=["POST"])
 def main():
     data = request.get_json()
-    print("Получено событие:", data)
+    print("📥 Получено событие:", data)
 
     if data.get("type") == "confirmation":
         return CONFIRMATION_TOKEN, 200
@@ -105,5 +119,4 @@ def main():
 
 # Запуск Flask-сервера
 if __name__ == "__main__":
-    from config import TOKEN, CONFIRMATION_TOKEN, SECRET_KEY
     app.run(host="0.0.0.0", port=5000)
