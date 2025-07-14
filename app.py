@@ -38,7 +38,6 @@ def show_help():
         "👋 Я бот VK Education!\n\n"
         "Я могу помочь с:\n"
         "• Поиском информации о проектах VK\n"
-        "• Где и как смотреть вебинары\n"
         "• Ответами на частые вопросы\n\n"
         "Например, спроси:\n"
         "• Как выбрать проект?\n"
@@ -52,16 +51,23 @@ def get_answer(message):
     msg = message.lower().strip()
 
     # Команды
-    if msg in ["/помощь", "помощь", "start", "/start", "начать"]:
+    if msg in ["/помощь", "помощь", "start", "/start", "начать", "команды"]:
         return show_help()
 
-    # Поиск по ключевым словам
+    best_item = None
+    max_hits = 0
+
     for item in qa_data:
-        if any(keyword in msg for keyword in item["keywords"]):
-            return item["answer"]
+        hits = sum(1 for keyword in item["keywords"] if keyword in msg)
+        if hits > max_hits:
+            best_item = item
+            max_hits = hits
+
+    if best_item:
+        return best_item["answer"]
 
     # Закрытые вопросы (да/нет)
-    if msg.endswith("?") and any(x in msg for x in ["можно", "возможно", "разрешено", "доступно", "могу"]):
+    if msg.endswith("?") and any(x in msg for x in ["можно", "возможно", "разрешено", "доступно", "могу", "стоит", "разрешается"]):
         return "Да."
 
     return None
@@ -96,7 +102,7 @@ def process_message(data):
         else:
             send_message(
                 user_id,
-                "Извините, я пока не знаю ответа 😕\nПопробуйте найти информацию на сайте: https://education.vk.company/education_projects"
+                "Извините, я пока не знаю ответа 😕\nПопробуйте найти информацию на сайте: https://education.vk.company/education_projects \n Напишите /помощь для списка команд."
             )
 
 # Обработка Callback от VK
