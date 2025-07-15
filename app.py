@@ -51,7 +51,7 @@ def get_answer(message):
     msg = message.lower().strip()
 
     # Команды
-    if msg in ["/помощь", "помощь", "start", "/start", "начать", "команды"]:
+    if msg in ["/помощь", "помощь", "start", "/start", "начать", "команды", "привет", "здравствуйте", "здравствуй"]:
         return show_help()
 
     best_item = None
